@@ -74,7 +74,16 @@ FetchContent_Declare(
     GIT_TAG release-2.30.7
 )
 
-FetchContent_MakeAvailable(glad SDL2)
+# -----------------
+# Sub-Section: cglm
+# -----------------
+
+FetchContent_Declare(
+    cglm
+    GIT_REPOSITORY https://github.com/recp/cglm
+    GIT_TAG v0.9.4
+)
+FetchContent_MakeAvailable(glad SDL2 cglm)
 
 # ----------------------
 # Section: Project setup
@@ -115,7 +124,9 @@ set(
 	LINK_LIBRARIES
 	glad
 	SDL2
+    cglm
     X11
+    m
     # ...
 )
 
