@@ -9,6 +9,8 @@
 #include "glad/glad.h"
 #include "cglm/types.h"
 #include "cglm/cam.h"
+#include "cglm/affine.h"
+#include "cglm/affine-pre.h"
 
 // TODO(yakub):
 // 1. Create a functionality for storing the display capture in the char* array
@@ -65,6 +67,12 @@ typedef struct s_core {
 
     unsigned int sh_prog;
 
+    vec2 mouse_wheel;
+
+    ivec2 mouse_pos;
+    ivec2 mouse_pos_prev;
+
+    int mouse_button[3];
 } t_core;
 
 static t_core CORE;
@@ -84,6 +92,10 @@ t_tex2d ft_tex2d(int w, int h, char* data);
 int ft_draw_rect(vec2 position, vec2 size, vec4 color);
 int ft_draw_tex2d(t_tex2d tex, vec2 position, vec2 size);
 
+int ft_mousedown(int button);
+int ft_mouseup(int button);
+float ft_mousewheel(void);
+
 int main(int argc, const char* argv[]) {
     unsigned int capture_width = 1920;
     unsigned int capture_height = 1080;
@@ -96,10 +108,26 @@ int main(int argc, const char* argv[]) {
     mat4 mat_proj = GLM_MAT4_IDENTITY_INIT;
     mat4 mat_view = GLM_MAT4_IDENTITY_INIT;
 
+    vec2 cam_pan = { 0 };
+    float cam_zoom = 0.0f;
+
     glm_ortho(0.0f, capture_width, capture_height, 0.0f, -1.0f, 1.0f, mat_proj);
     glUniformMatrix4fv(glGetUniformLocation(CORE.sh_prog, "u_proj"), 1, GL_FALSE, &mat_proj[0][0]);
 
 	while(!ft_should_quit()) {
+        // Camera panning
+        if(ft_mousedown(SDL_BUTTON_LEFT)) {
+            cam_pan[0] = (CORE.mouse_pos_prev[0] - CORE.mouse_pos[0]);
+            cam_pan[1] = (CORE.mouse_pos_prev[1] - CORE.mouse_pos[1]);
+
+            glm_translate(mat_view, (vec3) { -cam_pan[0], -cam_pan[1], 0.0f });
+        }
+        
+        // Camera zooming
+        if(ft_mousewheel() != 0.0f) {
+            // TODO: Implement zooming
+        }
+
 	    ft_poll_events();	
 
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -182,7 +210,10 @@ int ft_init_opengl(void) {
 }
 
 int ft_poll_events(void) {
-	SDL_Event event = { 0 };
+    CORE.mouse_pos_prev[0] = CORE.mouse_pos[0];
+    CORE.mouse_pos_prev[1] = CORE.mouse_pos[1];
+
+    SDL_Event event = { 0 };
     while(SDL_PollEvent(&event)) {
 		switch(event.type) {
 			case SDL_QUIT: {
@@ -191,7 +222,25 @@ int ft_poll_events(void) {
 
             case SDL_KEYDOWN: {
                 CORE.exit = 1;
-            }
+            } break;
+
+            case SDL_MOUSEMOTION: {
+                CORE.mouse_pos[0] = event.motion.x;
+                CORE.mouse_pos[1] = event.motion.y;
+            } break;
+
+            case SDL_MOUSEBUTTONDOWN: {
+                CORE.mouse_button[event.button.button] = 1;
+            } break;
+
+            case SDL_MOUSEBUTTONUP: {
+                CORE.mouse_button[event.button.button] = 0;
+            } break;
+
+            case SDL_MOUSEWHEEL: {
+                CORE.mouse_wheel[0] = event.wheel.x;
+                CORE.mouse_wheel[1] = event.wheel.y;
+            } break;
 		}
 	}
 
@@ -387,4 +436,16 @@ int ft_draw_tex2d(t_tex2d tex, vec2 position, vec2 size) {
     glDeleteVertexArrays(1, &vert_arr);
 
     return 1;
+}
+
+int ft_mousedown(int button) {
+    return CORE.mouse_button[button];
+}
+
+int ft_mouseup(int button) {
+    return !CORE.mouse_button[button];
+}
+
+float ft_mousewheel(void) {
+    return CORE.mouse_wheel[1];
 }
