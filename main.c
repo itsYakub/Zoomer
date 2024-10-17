@@ -7,10 +7,7 @@
 
 #include "SDL2/SDL.h"
 #include "glad/glad.h"
-#include "cglm/types.h"
-#include "cglm/cam.h"
-#include "cglm/affine.h"
-#include "cglm/affine-pre.h"
+#include "cglm/cglm.h"
 
 // TODO(yakub):
 // 1. Create a functionality for storing the display capture in the char* array
@@ -60,6 +57,12 @@ typedef struct s_tex2d {
     unsigned int id;
 } t_tex2d;
 
+typedef struct s_cam2d {
+    vec2 target;
+    vec2 offset;
+    float scale;
+} t_cam2d;
+
 typedef struct s_core {
     void* window;
     SDL_GLContext context;
@@ -69,8 +72,8 @@ typedef struct s_core {
 
     vec2 mouse_wheel;
 
-    ivec2 mouse_pos;
-    ivec2 mouse_pos_prev;
+    vec2 mouse_pos;
+    vec2 mouse_pos_prev;
 
     int mouse_button[3];
 } t_core;
@@ -96,6 +99,13 @@ int ft_mousedown(int button);
 int ft_mouseup(int button);
 float ft_mousewheel(void);
 
+int ft_cam2d_display(t_cam2d cam);
+int ft_screen_to_world(t_cam2d cam, vec2 src, vec2 dest);
+int ft_cam2d_matrix(t_cam2d cam, mat4 dest);
+
+int ft_cam2d_pan(t_cam2d* cam);
+int ft_cam2d_zoom(t_cam2d* cam);
+
 int main(int argc, const char* argv[]) {
     unsigned int capture_width = 1920;
     unsigned int capture_height = 1080;
@@ -104,37 +114,24 @@ int main(int argc, const char* argv[]) {
     ft_init(capture_width, capture_height, "Okay, Zoomer | 1.0.0"); 
 
     t_tex2d capture_texture = ft_tex2d(capture_width, capture_height, capture_data);
-
-    mat4 mat_proj = GLM_MAT4_IDENTITY_INIT;
-    mat4 mat_view = GLM_MAT4_IDENTITY_INIT;
-
-    vec2 cam_pan = { 0 };
-    float cam_zoom = 0.0f;
-
-    glm_ortho(0.0f, capture_width, capture_height, 0.0f, -1.0f, 1.0f, mat_proj);
-    glUniformMatrix4fv(glGetUniformLocation(CORE.sh_prog, "u_proj"), 1, GL_FALSE, &mat_proj[0][0]);
+    
+    t_cam2d cam = { .scale = 1.0f };
 
 	while(!ft_should_quit()) {
         // Camera panning
-        if(ft_mousedown(SDL_BUTTON_LEFT)) {
-            cam_pan[0] = (CORE.mouse_pos_prev[0] - CORE.mouse_pos[0]);
-            cam_pan[1] = (CORE.mouse_pos_prev[1] - CORE.mouse_pos[1]);
-
-            glm_translate(mat_view, (vec3) { -cam_pan[0], -cam_pan[1], 0.0f });
-        }
+        if(ft_mousedown(SDL_BUTTON_LEFT))
+            ft_cam2d_pan(&cam);    
         
         // Camera zooming
-        if(ft_mousewheel() != 0.0f) {
-            // TODO: Implement zooming
-        }
+        if(ft_mousewheel() != 0.0f)
+            ft_cam2d_zoom(&cam);
 
 	    ft_poll_events();	
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
 
-        glUniformMatrix4fv(glGetUniformLocation(CORE.sh_prog, "u_view"), 1, GL_FALSE, &mat_view[0][0]);
-
+        ft_cam2d_display(cam);
         ft_draw_tex2d(capture_texture, (vec2) { 0.0f, 0.0f }, (vec2) { capture_width, capture_height });
 
         ft_display();
@@ -212,6 +209,9 @@ int ft_init_opengl(void) {
 int ft_poll_events(void) {
     CORE.mouse_pos_prev[0] = CORE.mouse_pos[0];
     CORE.mouse_pos_prev[1] = CORE.mouse_pos[1];
+
+    CORE.mouse_wheel[0] = 0.0f;
+    CORE.mouse_wheel[1] = 0.0f;
 
     SDL_Event event = { 0 };
     while(SDL_PollEvent(&event)) {
@@ -447,5 +447,100 @@ int ft_mouseup(int button) {
 }
 
 float ft_mousewheel(void) {
-    return CORE.mouse_wheel[1];
+    float wheel = 0.0f;
+
+    if(fabsf(CORE.mouse_wheel[0]) > fabsf(CORE.mouse_wheel[1]))
+        wheel = CORE.mouse_wheel[0];
+    else
+        wheel = CORE.mouse_wheel[1];
+
+    return wheel;
+}
+
+int ft_cam2d_display(t_cam2d cam) {
+    unsigned int w = 1920;
+    unsigned int h = 1080;
+
+    mat4 mat_proj = GLM_MAT4_IDENTITY_INIT;
+    mat4 mat_view = GLM_MAT4_IDENTITY_INIT;
+
+    glm_ortho(0.0f, w, h, 0.0f, -1.0f, 1.0f, mat_proj);
+    glUniformMatrix4fv(glGetUniformLocation(CORE.sh_prog, "u_proj"), 1, GL_FALSE, &mat_proj[0][0]);
+
+    ft_cam2d_matrix(cam, mat_view);
+    glUniformMatrix4fv(glGetUniformLocation(CORE.sh_prog, "u_view"), 1, GL_FALSE, &mat_view[0][0]);
+
+    return 1;
+}
+
+int ft_screen_to_world(t_cam2d cam, vec2 src, vec2 dest) {
+    // TODO: Implement screen-to-world transformation function...
+    // There's now an issue where the scale plays the huge role
+    // Only when we're next to the default scale (1.0f) the position translation works fine
+    // On the other scenarios it's broken, and resets either to 0-0 or somewhere else ._.
+    mat4 mat_cam;
+    mat4 mat_cam_inv;
+    ft_cam2d_matrix(cam, mat_cam);
+    glm_mat4_inv(mat_cam, mat_cam_inv);
+
+    vec2 transform;
+    transform[0] = mat_cam_inv[0][0] * src[0] + mat_cam_inv[0][1] * src[1] + mat_cam_inv[0][2] * 0.0f + mat_cam_inv[0][3];
+    transform[1] = mat_cam_inv[1][0] * src[0] + mat_cam_inv[1][1] * src[1] + mat_cam_inv[1][2] * 0.0f + mat_cam_inv[1][3];
+    
+    dest[0] = transform[0];
+    dest[1] = transform[1];
+
+    return 1;
+}
+
+int ft_cam2d_matrix(t_cam2d cam, mat4 dest) {
+    mat4 mat_result = GLM_MAT4_IDENTITY_INIT;
+    mat4 mat_target = GLM_MAT4_IDENTITY_INIT;
+    mat4 mat_scale = GLM_MAT4_IDENTITY_INIT;
+    mat4 mat_offset = GLM_MAT4_IDENTITY_INIT;
+
+    glm_translate(mat_target, (vec3) { -cam.target[0], -cam.target[1], 0.0f });
+    glm_scale(mat_scale, (vec3) { cam.scale, cam.scale, 1.0f });
+    glm_translate(mat_offset, (vec3) { cam.offset[0], cam.offset[1], 0.0f });
+    
+    glm_mat4_mul(mat_result, mat_scale, mat_result);
+    glm_mat4_mul(mat_result, mat_target, mat_result);
+    glm_mat4_mul(mat_result, mat_offset, dest);
+
+    return 1;    
+}
+
+int ft_cam2d_pan(t_cam2d* cam) {
+    vec2 delta_scaled;
+    vec2 delta = {
+        (CORE.mouse_pos[0] - CORE.mouse_pos_prev[0]),
+        (CORE.mouse_pos[1] - CORE.mouse_pos_prev[1])
+    };
+
+    // TODO: When the scale is too small the movement is too slow
+    glm_vec2_scale(delta, -1.0f / cam->scale, delta_scaled);
+    glm_vec2_add(cam->target, delta_scaled, cam->target);
+
+    return 1;
+}
+
+int ft_cam2d_zoom(t_cam2d* cam) {
+    // TODO: Implement zooming
+    float mouse_wheel = ft_mousewheel();
+    float scale_factor = 1.0f + (0.25f * fabsf(mouse_wheel));
+    if(mouse_wheel < 0.0f)
+        scale_factor = 1.0f / scale_factor;
+
+    vec2 mouse_pos_screen;
+    vec2 mouse_pos_world;
+
+    glm_vec2_copy(CORE.mouse_pos, mouse_pos_screen);
+    ft_screen_to_world(*cam, CORE.mouse_pos, mouse_pos_world);
+            
+    // TODO: Fix the camera positioning
+    glm_vec2_copy(mouse_pos_screen, cam->offset);
+    glm_vec2_copy(mouse_pos_world, cam->target);
+    cam->scale = glm_clamp(cam->scale * scale_factor, 0.1f, 32.0f);   
+
+    return 1;
 }
