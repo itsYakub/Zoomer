@@ -9,13 +9,8 @@
 #include "glad/glad.h"
 #include "cglm/cglm.h"
 
-// TODO(yakub):
-// 1. Create a functionality for storing the display capture in the char* array
-// 2. Create a borderless, fullscreen window 
-// 3. Create a 2D Texture that will be the size of the screen
-// 4. Render the texture on the screen
-// 5. Pan and zoom the texture using the input events callbacks
-// 6. Exit the application with a simple input (maybe a classic <ESC> key)
+#define ZOOMER_ZOOM_MIN 0.001f
+#define ZOOMER_ZOOM_MAX 32.0f
 
 const char* glsl_vert =
 "#version 460 core\n"
@@ -92,7 +87,6 @@ int ft_quit(void);
 char* ft_screen_capture(int w, int h);
 t_tex2d ft_tex2d(int w, int h, char* data);
 
-int ft_draw_rect(vec2 position, vec2 size, vec4 color);
 int ft_draw_tex2d(t_tex2d tex, vec2 position, vec2 size);
 
 int ft_mousedown(int button);
@@ -126,8 +120,6 @@ int main(int argc, const char* argv[]) {
         if(ft_mousewheel() != 0.0f)
             ft_cam2d_zoom(&cam);
 
-	    ft_poll_events();	
-
 		glClear(GL_COLOR_BUFFER_BIT);
 		glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
 
@@ -135,6 +127,7 @@ int main(int argc, const char* argv[]) {
         ft_draw_tex2d(capture_texture, (vec2) { 0.0f, 0.0f }, (vec2) { capture_width, capture_height });
 
         ft_display();
+	    ft_poll_events();	
 	}
 
     free(capture_data);
@@ -334,59 +327,7 @@ t_tex2d ft_tex2d(int w, int h, char* data) {
     return tex;
 }
 
-int ft_draw_rect(vec2 position, vec2 size, vec4 color) {
-    GLfloat vertices[] = {
-        position[0], position[1], 0.0f,     color[0], color[1], color[2], color[3],     0.0f, 0.0f,     0.0f,
-        position[0] + size[1], position[1], 0.0f,     color[0], color[1], color[2], color[3],     1.0f, 0.0f,   0.0f,
-        position[0], position[1] + size[1], 0.0f,     color[0], color[1], color[2], color[3],     0.0f, 1.0f,   0.0f,
-        position[0] + size[0], position[1] + size[1], 0.0f,     color[0], color[1], color[2], color[3],     1.0f, 1.0f,     0.0f,
-    };
-
-    GLuint indices[] = {
-        0, 1, 2,
-        1, 2, 3
-    };
-
-    GLuint vert_arr;
-    glGenVertexArrays(1, &vert_arr);
-    glBindVertexArray(vert_arr);
-
-    GLuint vert_buf;
-    glGenBuffers(1, &vert_buf);
-    glBindBuffer(GL_ARRAY_BUFFER, vert_buf);
-
-    GLuint elem_buf;
-    glGenBuffers(1, &elem_buf);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elem_buf);
-
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
-
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat), (void*) (0 * sizeof(GLfloat)));
-    
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat), (void*) (3 * sizeof(GLfloat)));
-
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat), (void*) (7 * sizeof(GLfloat)));
- 
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 1, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat), (void*) (9 * sizeof(GLfloat)));
- 
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-
-    glDeleteBuffers(1, &vert_buf);
-    glDeleteBuffers(1, &elem_buf);
-    glDeleteVertexArrays(1, &vert_arr);
-
-    return 1;
-}
-
 int ft_draw_tex2d(t_tex2d tex, vec2 position, vec2 size) {
-    // TODO: Implement a texture drawing function
-    // I wonder if I should use a global OpenGL objects or local
-    // Will think about that tomorrow, gn o/
     GLfloat vertices[] = {
         position[0], position[1], 0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     0.0f, 0.0f,     tex.id,
         position[0] + size[0], position[1], 0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     1.0f, 0.0f,   tex.id,
@@ -458,13 +399,10 @@ float ft_mousewheel(void) {
 }
 
 int ft_cam2d_display(t_cam2d cam) {
-    unsigned int w = 1920;
-    unsigned int h = 1080;
-
     mat4 mat_proj = GLM_MAT4_IDENTITY_INIT;
     mat4 mat_view = GLM_MAT4_IDENTITY_INIT;
 
-    glm_ortho(0.0f, w, h, 0.0f, -1.0f, 1.0f, mat_proj);
+    glm_ortho(0.0f, 1920.0f, 1080.0f, 0.0f, -1.0f, 1.0f, mat_proj);
     glUniformMatrix4fv(glGetUniformLocation(CORE.sh_prog, "u_proj"), 1, GL_FALSE, &mat_proj[0][0]);
 
     ft_cam2d_matrix(cam, mat_view);
@@ -474,39 +412,34 @@ int ft_cam2d_display(t_cam2d cam) {
 }
 
 int ft_screen_to_world(t_cam2d cam, vec2 src, vec2 dest) {
-    // TODO: Implement screen-to-world transformation function...
-    // There's now an issue where the scale plays the huge role
-    // Only when we're next to the default scale (1.0f) the position translation works fine
-    // On the other scenarios it's broken, and resets either to 0-0 or somewhere else ._.
     mat4 mat_cam;
     mat4 mat_cam_inv;
     ft_cam2d_matrix(cam, mat_cam);
     glm_mat4_inv(mat_cam, mat_cam_inv);
 
-    vec2 transform;
-    transform[0] = mat_cam_inv[0][0] * src[0] + mat_cam_inv[0][1] * src[1] + mat_cam_inv[0][2] * 0.0f + mat_cam_inv[0][3];
-    transform[1] = mat_cam_inv[1][0] * src[0] + mat_cam_inv[1][1] * src[1] + mat_cam_inv[1][2] * 0.0f + mat_cam_inv[1][3];
+    vec4 trans_mulv;
+    vec4 trans = {
+        src[0],
+        src[1],
+        0.0f,
+        1.0f
+    };
     
-    dest[0] = transform[0];
-    dest[1] = transform[1];
+    glm_mat4_mulv(mat_cam_inv, trans, trans_mulv); 
+    
+    dest[0] = trans_mulv[0];
+    dest[1] = trans_mulv[1];
 
     return 1;
 }
 
 int ft_cam2d_matrix(t_cam2d cam, mat4 dest) {
-    mat4 mat_result = GLM_MAT4_IDENTITY_INIT;
-    mat4 mat_target = GLM_MAT4_IDENTITY_INIT;
-    mat4 mat_scale = GLM_MAT4_IDENTITY_INIT;
-    mat4 mat_offset = GLM_MAT4_IDENTITY_INIT;
+    glm_mat4_identity(dest);
 
-    glm_translate(mat_target, (vec3) { -cam.target[0], -cam.target[1], 0.0f });
-    glm_scale(mat_scale, (vec3) { cam.scale, cam.scale, 1.0f });
-    glm_translate(mat_offset, (vec3) { cam.offset[0], cam.offset[1], 0.0f });
+    glm_translate(dest, (vec3) { cam.offset[0], cam.offset[1], 0.0f });
+    glm_scale(dest, (vec3) { cam.scale, cam.scale, 1.0f });
+    glm_translate(dest, (vec3) { -cam.target[0], -cam.target[1], 0.0f });
     
-    glm_mat4_mul(mat_result, mat_scale, mat_result);
-    glm_mat4_mul(mat_result, mat_target, mat_result);
-    glm_mat4_mul(mat_result, mat_offset, dest);
-
     return 1;    
 }
 
@@ -517,30 +450,32 @@ int ft_cam2d_pan(t_cam2d* cam) {
         (CORE.mouse_pos[1] - CORE.mouse_pos_prev[1])
     };
 
-    // TODO: When the scale is too small the movement is too slow
     glm_vec2_scale(delta, -1.0f / cam->scale, delta_scaled);
-    glm_vec2_add(cam->target, delta_scaled, cam->target);
+
+    cam->target[0] += delta_scaled[0];
+    cam->target[1] += delta_scaled[1];
 
     return 1;
 }
 
 int ft_cam2d_zoom(t_cam2d* cam) {
     // TODO: Implement zooming
+    vec2 mouse_pos_world;
+
+    ft_screen_to_world(*cam, CORE.mouse_pos, mouse_pos_world);
+            
+    cam->target[0] = mouse_pos_world[0];
+    cam->target[1] = mouse_pos_world[1];
+    
+    cam->offset[0] = CORE.mouse_pos[0];
+    cam->offset[1] = CORE.mouse_pos[1];
+
     float mouse_wheel = ft_mousewheel();
     float scale_factor = 1.0f + (0.25f * fabsf(mouse_wheel));
     if(mouse_wheel < 0.0f)
-        scale_factor = 1.0f / scale_factor;
-
-    vec2 mouse_pos_screen;
-    vec2 mouse_pos_world;
-
-    glm_vec2_copy(CORE.mouse_pos, mouse_pos_screen);
-    ft_screen_to_world(*cam, CORE.mouse_pos, mouse_pos_world);
-            
-    // TODO: Fix the camera positioning
-    glm_vec2_copy(mouse_pos_screen, cam->offset);
-    glm_vec2_copy(mouse_pos_world, cam->target);
-    cam->scale = glm_clamp(cam->scale * scale_factor, 0.1f, 32.0f);   
+    
+    scale_factor = 1.0f / scale_factor;
+    cam->scale = glm_clamp(cam->scale * scale_factor, ZOOMER_ZOOM_MIN, ZOOMER_ZOOM_MAX);   
 
     return 1;
 }
