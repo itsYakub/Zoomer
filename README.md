@@ -2,6 +2,7 @@
 
 ## **Overview**
 **Zoomer** is a magnifirer application - utility for linux and windows.
+
 *(NOTE: Windows support is going to be added in the near future.)*
 
 ## **Getting started:**
