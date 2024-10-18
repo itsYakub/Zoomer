@@ -1,4 +1,9 @@
+<div align="center">
+  
 # **Zoomer 🤓**
+
+*"I think I should rewrite this shit in C already" ~Tsoding*
+</div>
 
 ## **Overview**
 **Zoomer** is a magnifirer application - utility for linux and windows.
