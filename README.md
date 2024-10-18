@@ -1,7 +1,8 @@
-# **OpenGL Template**
+# **Zoomer 🤓**
 
 ## **Overview**
-This is the basic template for OpenGL and C development.
+**Zoomer** is a magnifirer application - utility for linux and windows.
+*(NOTE: Windows support is going to be added in the near future.)*
 
 ## **Getting started:**
 
@@ -11,8 +12,8 @@ This is the basic template for OpenGL and C development.
 
 **1. Clone this repository:**
 ```console
-$ git clone https://github.com/itsYakub/OpenGL-Template.git
-$ cd OpenGL-Template/
+$ git clone https://github.com/itsYakub/Zoomer.git
+$ cd Zoomer/
 ```
 
 **2. Create a build directory:**
@@ -33,6 +34,7 @@ $ cmake --build .
 This project works thanks to these libraries:
 - [**glad**](https://github.com/Dav1dde/glad): Multi-Language Vulkan/GL/GLES/EGL/GLX/WGL Loader-Generator based on the official specs.
 - [**SDL2**](https://github.com/libsdl-org/SDL): Simple Directmedia Layer.
+- [**X11**](https://x.org/wiki/): X Window System.
 
 ## **Licence:**
-By default, this template is under the [**MIT LICENCE**](./LICENCE). You can change it to whatever you want!
+This project is under the [**MIT LICENCE**](./LICENCE).
