@@ -1,3 +1,23 @@
+// +----------------------------------------------------+
+// |                                                    |
+// |   _____                                            |
+// |  |__  /   ___     ___    _ __ ___     ___   _ __   |
+// |    / /   / _ \   / _ \  | '_ ` _ \   / _ \ | '__|  |
+// |   / /_  | (_) | | (_) | | | | | | | |  __/ | |     |
+// |  /____|  \___/   \___/  |_| |_| |_|  \___| |_|     |
+// |                                                    |
+// |                                                    |
+// +----------------------------------------------------+
+// |  Magnifier application for Linux and Window in C!  |
+// +----------------------------------------------------+
+// | Made by:                                           |
+// |  https://github.com/itsYakub                       |
+// +----------------------------------------------------+
+
+// -----------------
+// SECTION: Includes
+// -----------------
+
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <stdio.h>
@@ -9,8 +29,31 @@
 #include "glad/glad.h"
 #include "cglm/cglm.h"
 
-#define ZOOMER_ZOOM_MIN 0.001f
-#define ZOOMER_ZOOM_MAX 32.0f
+// --------------------------
+// SECTION: Macro Definitions
+// --------------------------
+
+#ifndef ZOOMER_ZOOM_MIN
+    #define ZOOMER_ZOOM_MIN 0.5f // This value is for zooming out (range: 0.0f - 1.0f)
+#endif // ZOOMER_ZOOM_MIN
+
+#ifndef ZOOMER_ZOOM_MAX
+    #define ZOOMER_ZOOM_MAX 64.0f // This value is for zooming in (range: 0.0f - n)
+#endif // ZOOMER_ZOOM_MAX
+
+// TODO: Replace all the magic numbers refering to display size with those macros
+
+#ifndef ZOOMER_DISPLAY_WIDTH
+    #define ZOOMER_DISPLAY_WIDTH 1920
+#endif // ZOOMER_DISPLAY_WIDTH
+
+#ifndef ZOOME_DISPLAY_HEIGHT
+    #define ZOOMER_DISPLAY_HEIGHT 1080
+#endif // ZOOMER_DISPLAY_HEIGHT
+
+// -------------------------
+// SECTION: Global Variables
+// -------------------------
 
 const char* glsl_vert =
 "#version 460 core\n"
@@ -45,6 +88,10 @@ const char* glsl_frag =
 "       f_Col = v_Col;\n"
 "}";
 
+// -----------------
+// SECTION: Typedefs
+// -----------------
+
 typedef struct s_tex2d {
     unsigned int w;
     unsigned int h;
@@ -71,9 +118,20 @@ typedef struct s_core {
     vec2 mouse_pos_prev;
 
     int mouse_button[3];
+
+    int key[SDL_NUM_SCANCODES];
+    int key_prev[SDL_NUM_SCANCODES];
 } t_core;
 
 static t_core CORE;
+
+// ------------------------------
+// SECTION: Function declarations
+// ------------------------------
+
+// ------------------------------
+// SECTION: Functions - Windowing
+// ------------------------------
 
 int ft_init(unsigned int w, unsigned int h, const char* title);
 int ft_init_window(unsigned int w, unsigned int h, const char* title);
@@ -84,14 +142,33 @@ int ft_should_quit(void);
 int ft_display(void);
 int ft_quit(void);
 
-char* ft_screen_capture(int w, int h);
-t_tex2d ft_tex2d(int w, int h, char* data);
+// -----------------------------------
+// SECTION: Functions - Screen Capture
+// -----------------------------------
 
+char* ft_screen_capture(int w, int h);
+
+// ------------------------------
+// SECTION: Functions - Texturing
+// ------------------------------
+t_tex2d ft_tex2d(int w, int h, char* data);
 int ft_draw_tex2d(t_tex2d tex, vec2 position, vec2 size);
 
+// -----------------------------
+// SECTION: Functions - Inputing
+// -----------------------------
 int ft_mousedown(int button);
 int ft_mouseup(int button);
 float ft_mousewheel(void);
+
+int ft_keydown(SDL_Scancode code);
+int ft_keyup(SDL_Scancode code);
+int ft_keypress(SDL_Scancode code);
+int ft_keyrelease(SDL_Scancode code);
+
+// ---------------------------
+// SECTION: Functions - Camera
+// ---------------------------
 
 int ft_cam2d_display(t_cam2d cam);
 int ft_screen_to_world(t_cam2d cam, vec2 src, vec2 dest);
@@ -100,35 +177,79 @@ int ft_cam2d_matrix(t_cam2d cam, mat4 dest);
 int ft_cam2d_pan(t_cam2d* cam);
 int ft_cam2d_zoom(t_cam2d* cam);
 
+// ----------------
+// SECTION: Program
+// ----------------
+
 int main(int argc, const char* argv[]) {
-    unsigned int capture_width = 1920;
-    unsigned int capture_height = 1080;
-    char* capture_data = ft_screen_capture(capture_width, capture_height);
 
-    ft_init(capture_width, capture_height, "Okay, Zoomer | 1.0.0"); 
+    // -----------------------
+    // SECTION: Program - Load
+    // -----------------------
 
-    t_tex2d capture_texture = ft_tex2d(capture_width, capture_height, capture_data);
-    
+    char* capture_data = ft_screen_capture(ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT);
+
+    ft_init(ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT, "Zoomer | 1.0.0"); 
+
+    t_tex2d capture_texture = ft_tex2d(ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT, capture_data);
     t_cam2d cam = { .scale = 1.0f };
+    int cam_reset = 0;
 
 	while(!ft_should_quit()) {
+
+        // -------------------------
+        // SECTION: Program - Update
+        // -------------------------
+
         // Camera panning
-        if(ft_mousedown(SDL_BUTTON_LEFT))
+        if(ft_mousedown(SDL_BUTTON_LEFT) || ft_mousedown(SDL_BUTTON_RIGHT))
             ft_cam2d_pan(&cam);    
         
         // Camera zooming
         if(ft_mousewheel() != 0.0f)
             ft_cam2d_zoom(&cam);
+        
+        // Camera reseting
+        if(ft_keypress(SDL_SCANCODE_R) && !cam_reset) cam_reset = 1;
+        if(cam_reset) {
+            if(
+                    round(cam.target[0]) == 0 &&
+                    round(cam.target[1]) == 0 &&
+                    round(cam.offset[0]) == 0 &&
+                    round(cam.offset[1]) == 0 &&
+                    round(cam.scale) == 1.0
+            ) {
+                cam.target[0] = 0.0f;
+                cam.target[1] = 0.0f;
+                cam.offset[0] = 0.0f;
+                cam.offset[1] = 0.0f;
+                cam.scale = 1.0f;
+
+                cam_reset = 0;
+            } else {
+                glm_vec2_lerp(cam.target, GLM_VEC2_ZERO, 0.5f, cam.target);
+                glm_vec2_lerp(cam.offset, GLM_VEC2_ZERO, 0.5f, cam.offset);
+                cam.scale = glm_lerp(cam.scale, 1.0f, 0.5f);
+            }
+        }
+        
+        // -------------------------
+        // SECTION: Program - Render
+        // -------------------------
 
 		glClear(GL_COLOR_BUFFER_BIT);
 		glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
 
         ft_cam2d_display(cam);
-        ft_draw_tex2d(capture_texture, (vec2) { 0.0f, 0.0f }, (vec2) { capture_width, capture_height });
+        ft_draw_tex2d(capture_texture, (vec2) { 0.0f, 0.0f }, (vec2) { ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT });
 
         ft_display();
 	    ft_poll_events();	
 	}
+    
+    // ------------------------
+    // SECTION: Program - Close
+    // ------------------------
 
     free(capture_data);
     glDeleteTextures(1, &capture_texture.id);
@@ -137,6 +258,14 @@ int main(int argc, const char* argv[]) {
 
 	return 0;
 }
+
+// -----------------------------
+// SECTION: Function definitions
+// -----------------------------
+
+// ------------------------------
+// SECTION: Functions - Windowing
+// ------------------------------
 
 int ft_init(unsigned int w, unsigned int h, const char* title) {
     ft_init_window(w, h, title);
@@ -202,6 +331,10 @@ int ft_init_opengl(void) {
 int ft_poll_events(void) {
     CORE.mouse_pos_prev[0] = CORE.mouse_pos[0];
     CORE.mouse_pos_prev[1] = CORE.mouse_pos[1];
+    CORE.mouse_pos_prev[2] = CORE.mouse_pos[2];
+
+    for(int i = 0; i < SDL_NUM_SCANCODES; i++)
+        CORE.key_prev[i] = CORE.key[i];
 
     CORE.mouse_wheel[0] = 0.0f;
     CORE.mouse_wheel[1] = 0.0f;
@@ -212,10 +345,6 @@ int ft_poll_events(void) {
 			case SDL_QUIT: {
 				CORE.exit = 1;
 			} break;
-
-            case SDL_KEYDOWN: {
-                CORE.exit = 1;
-            } break;
 
             case SDL_MOUSEMOTION: {
                 CORE.mouse_pos[0] = event.motion.x;
@@ -233,6 +362,17 @@ int ft_poll_events(void) {
             case SDL_MOUSEWHEEL: {
                 CORE.mouse_wheel[0] = event.wheel.x;
                 CORE.mouse_wheel[1] = event.wheel.y;
+            } break;
+
+            case SDL_KEYDOWN: {
+                CORE.key[event.key.keysym.scancode] = 1;
+
+                if(event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
+                    CORE.exit = 1;
+            } break;
+            
+            case SDL_KEYUP: {
+                CORE.key[event.key.keysym.scancode] = 0;
             } break;
 		}
 	}
@@ -259,6 +399,10 @@ int ft_quit(void) {
 	SDL_Quit();
     return 1;
 }
+
+// -----------------------------------
+// SECTION: Functions - Screen Capture
+// -----------------------------------
 
 char* ft_screen_capture(int w, int h) {
     Display* x_display = XOpenDisplay(NULL);
@@ -298,6 +442,10 @@ char* ft_screen_capture(int w, int h) {
     return data;
 }
 
+// ------------------------------
+// SECTION: Functions - Texturing
+// ------------------------------
+
 t_tex2d ft_tex2d(int w, int h, char* data) {
     t_tex2d tex = { 
         .w = w,
@@ -307,6 +455,12 @@ t_tex2d ft_tex2d(int w, int h, char* data) {
 
     glGenTextures(1, &tex.id);
     glBindTexture(GL_TEXTURE_2D, tex.id);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     glTexImage2D(
         GL_TEXTURE_2D,
@@ -379,6 +533,10 @@ int ft_draw_tex2d(t_tex2d tex, vec2 position, vec2 size) {
     return 1;
 }
 
+// -----------------------------
+// SECTION: Functions - Inputing
+// -----------------------------
+
 int ft_mousedown(int button) {
     return CORE.mouse_button[button];
 }
@@ -398,11 +556,31 @@ float ft_mousewheel(void) {
     return wheel;
 }
 
+int ft_keydown(SDL_Scancode code) {
+    return CORE.key[code];
+}
+
+int ft_keyup(SDL_Scancode code) {
+    return !CORE.key[code];
+}
+
+int ft_keypress(SDL_Scancode code) {
+    return CORE.key[code] && !CORE.key_prev[code];
+}
+
+int ft_keyrelease(SDL_Scancode code) {
+    return !CORE.key[code] && CORE.key_prev[code];
+}
+
+// ---------------------------
+// SECTION: Functions - Camera
+// ---------------------------
+
 int ft_cam2d_display(t_cam2d cam) {
     mat4 mat_proj = GLM_MAT4_IDENTITY_INIT;
     mat4 mat_view = GLM_MAT4_IDENTITY_INIT;
 
-    glm_ortho(0.0f, 1920.0f, 1080.0f, 0.0f, -1.0f, 1.0f, mat_proj);
+    glm_ortho(0.0f, ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT, 0.0f, -1.0f, 1.0f, mat_proj);
     glUniformMatrix4fv(glGetUniformLocation(CORE.sh_prog, "u_proj"), 1, GL_FALSE, &mat_proj[0][0]);
 
     ft_cam2d_matrix(cam, mat_view);
@@ -479,3 +657,27 @@ int ft_cam2d_zoom(t_cam2d* cam) {
 
     return 1;
 }
+
+// +--------------------------------------------------------------------------------+
+// |                                     LICENCE                                    |
+// +--------------------------------------------------------------------------------+
+// | Copyright (c) 2024 Jakub Oleksiak <yakubofficialmail@gmail.com>                |
+// |                                                                                |
+// | Permission is hereby granted, free of charge, to any person obtaining a copy   |
+// | of this software and associated documentation files (the "Software"), to deal  |
+// | in the Software without restriction, including without limitation the rights   |
+// | to use, copy, modify, merge, publish, distribute, sublicense, and/or sell      |
+// | copies of the Software, and to permit persons to whom the Software is          |
+// | furnished to do so, subject to the following conditions:                       |
+// |                                                                                |
+// | The above copyright notice and this permission notice shall be included in all |
+// | copies or substantial portions of the Software.                                |
+// |                                                                                |
+// | THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,                |
+// | EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF             |
+// | MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.         |
+// | IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,    |
+// | DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR          |
+// | OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE  |
+// | OR OTHER DEALINGS IN THE SOFTWARE.                                             |
+// +--------------------------------------------------------------------------------+

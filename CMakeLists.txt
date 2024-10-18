@@ -1,16 +1,9 @@
 # ------------------------------------------------------------------------------
-# OpenGL Template
-# https://github.com/itsYakub/OpenGL-Template.git
+# Zoomer
+# https://github.com/itsYakub/Zoomer.git
 # ------------------------------------------------------------------------------
 # Author:
 # https://github.com/itsYakub
-# ------------------------------------------------------------------------------
-# Naming convention:
-# - *.c - source file extension
-# - *.h - header file extension
-# - src/ - source files directory
-# - include/ - header files direcotry
-# - bin/ - binary / final exec. directory
 # ------------------------------------------------------------------------------
 # LICENCE (MIT):
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -92,9 +85,9 @@ FetchContent_MakeAvailable(glad SDL2 cglm)
 project(
 	zoomer
 	VERSION 1.0
-	DESCRIPTION "Basic template for OpenGL development in C"
-	HOMEPAGE_URL "https://github.com/itsYakub/OpenGL-Template.git"
-	LANGUAGES C CXX
+    DESCRIPTION "Magnifier application for Linux and Window in C!"
+	HOMEPAGE_URL "https://github.com/itsYakub/Zoomer.git"
+	LANGUAGES C
 )
 
 # --------------------
@@ -148,9 +141,6 @@ if (LINUX)
     # (Source: https://gcc.gnu.org/onlinedocs/gcc/Link-Options.html)
     target_link_options(${PROJECT_NAME} PRIVATE -static-libgcc -static-libstdc++)
 
-    # LINUX: Setting the target executable's suffix (for linux: *.out).
-    set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".out")
-
 endif(LINUX)
 
 if (WIN32)
@@ -162,9 +152,6 @@ if (WIN32)
     # WINDOWS: Telling the linker to statically link our application.
     # (Source: https://gcc.gnu.org/onlinedocs/gcc/Link-Options.html)
     target_link_options(${PROJECT_NAME} PRIVATE -static)
-
-    # WINDOWS: Setting the target executable's suffix (for Win32: *.exe).
-    set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".exe")
 
 endif(WIN32)
 
@@ -181,8 +168,5 @@ if (APPLE)
     # APPLE: Telling the linker to link to: OpenGL - cross-language, cross-platform application programming interface for rendering 2D and 3D vector graphics.
     # (Source: https://en.wikipedia.org/wiki/OpenGL)
     target_link_libraries(${PROJECT_NAME} "-framework OpenGL")
-
-    # APPLE: Setting the target executable's suffix (for MacOS: *.app).
-    set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".app")
 
 endif(APPLE)
