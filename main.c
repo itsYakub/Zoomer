@@ -41,8 +41,6 @@
     #define ZOOMER_ZOOM_MAX 64.0f // This value is for zooming in (range: 0.0f - n)
 #endif // ZOOMER_ZOOM_MAX
 
-// TODO: Replace all the magic numbers refering to display size with those macros
-
 #ifndef ZOOMER_DISPLAY_WIDTH
     #define ZOOMER_DISPLAY_WIDTH 1920
 #endif // ZOOMER_DISPLAY_WIDTH
@@ -637,7 +635,6 @@ int ft_cam2d_pan(t_cam2d* cam) {
 }
 
 int ft_cam2d_zoom(t_cam2d* cam) {
-    // TODO: Implement zooming
     vec2 mouse_pos_world;
 
     ft_screen_to_world(*cam, CORE.mouse_pos, mouse_pos_world);
@@ -649,7 +646,7 @@ int ft_cam2d_zoom(t_cam2d* cam) {
     cam->offset[1] = CORE.mouse_pos[1];
 
     float mouse_wheel = ft_mousewheel();
-    float scale_factor = 1.0f + (0.25f * fabsf(mouse_wheel));
+    float scale_factor = 1.0f + (0.25f * fabsf(mouse_wheel));  
     if(mouse_wheel < 0.0f)
     
     scale_factor = 1.0f / scale_factor;
