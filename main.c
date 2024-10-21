@@ -187,7 +187,11 @@ int main(int argc, const char* argv[]) {
 
     char* capture_data = ft_screen_capture(ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT);
 
-    ft_init(ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT, "Zoomer | 1.0.0"); 
+    if(!ft_init(ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT, "Zoomer | 1.0.0")) {
+        free(capture_data);
+
+        return 1;
+    } 
 
     t_tex2d capture_texture = ft_tex2d(ZOOMER_DISPLAY_WIDTH, ZOOMER_DISPLAY_HEIGHT, capture_data);
     t_cam2d cam = { .scale = 1.0f };
@@ -200,22 +204,32 @@ int main(int argc, const char* argv[]) {
         // -------------------------
 
         // Camera panning
-        if(ft_mousedown(SDL_BUTTON_LEFT) || ft_mousedown(SDL_BUTTON_RIGHT))
-            ft_cam2d_pan(&cam);    
+        if(ft_mousedown(SDL_BUTTON_LEFT) || ft_mousedown(SDL_BUTTON_RIGHT)) // Mouse-based movement
+            ft_cam2d_pan(&cam);   
+
+        // Keyboard-based movement
+        cam.target[0] += (ft_keydown(SDL_SCANCODE_D) - ft_keydown(SDL_SCANCODE_A)) * (ft_keydown(SDL_SCANCODE_LCTRL) ? 4.0f : 1.0f);
+        cam.target[1] += (ft_keydown(SDL_SCANCODE_S) - ft_keydown(SDL_SCANCODE_W)) * (ft_keydown(SDL_SCANCODE_LCTRL) ? 4.0f : 1.0f);
         
         // Camera zooming
         if(ft_mousewheel() != 0.0f)
             ft_cam2d_zoom(&cam);
         
         // Camera reseting
-        if(ft_keypress(SDL_SCANCODE_R) && !cam_reset) cam_reset = 1;
+        if(ft_keypress(SDL_SCANCODE_R) && !cam_reset) 
+            cam_reset = 2;
         if(cam_reset) {
+            // Default reset conditions ...
             if(
-                    round(cam.target[0]) == 0 &&
-                    round(cam.target[1]) == 0 &&
-                    round(cam.offset[0]) == 0 &&
-                    round(cam.offset[1]) == 0 &&
-                    round(cam.scale) == 1.0
+                    round(cam.target[0]) == 0.0f &&
+                    round(cam.target[1]) == 0.0f &&
+                    round(cam.offset[0]) == 0.0f &&
+                    round(cam.offset[1]) == 0.0f &&
+                    round(cam.scale * 100.0f) / 100.0f == 1.0f
+                    // Because the value of the scaling factor is so small, 
+                    // I'm doing a simple mathematical operation which moves the value to the hundreds and then divide it back to the single digit
+                    // I.e.:    > round(1.123f * 100.0f) / 100.0f = round(112.3f) / 100.0f = 112.0 / 100.0f = 1.12f
+                    //          > round(1.002 * 100.0f) / 100.0f = round(100.2f) / 100.0f = 100.0 / 100.0f = 1.0f
             ) {
                 cam.target[0] = 0.0f;
                 cam.target[1] = 0.0f;
@@ -224,6 +238,7 @@ int main(int argc, const char* argv[]) {
                 cam.scale = 1.0f;
 
                 cam_reset = 0;
+            // ... If they're not met, then we proceed with reseting ...
             } else {
                 glm_vec2_lerp(cam.target, GLM_VEC2_ZERO, 0.5f, cam.target);
                 glm_vec2_lerp(cam.offset, GLM_VEC2_ZERO, 0.5f, cam.offset);
@@ -266,15 +281,19 @@ int main(int argc, const char* argv[]) {
 // ------------------------------
 
 int ft_init(unsigned int w, unsigned int h, const char* title) {
-    ft_init_window(w, h, title);
-    ft_init_opengl();
+    int result = 0;
 
-    return 1;
+    result = ft_init_window(w, h, title);
+    result = ft_init_opengl();
+
+    return result;
 }
 
 
 int ft_init_window(unsigned int w, unsigned int h, const char* title) {
 	if(SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+        fprintf(stdout, "[ ERR ] SDL: %s\n", SDL_GetError());
+
 		return 0;
 	}
 
@@ -290,6 +309,13 @@ int ft_init_window(unsigned int w, unsigned int h, const char* title) {
 	    h,
 		SDL_WINDOW_OPENGL | SDL_WINDOW_FULLSCREEN | SDL_WINDOW_BORDERLESS
 	);
+
+    if(!CORE.window) {
+        fprintf(stdout, "[ ERR ] SDL: %s\n", SDL_GetError());
+
+        SDL_Quit();
+        return 0;
+    }
 
 	CORE.context = SDL_GL_CreateContext(CORE.window);
 	SDL_GL_MakeCurrent(CORE.window, CORE.context);
@@ -366,7 +392,7 @@ int ft_poll_events(void) {
                 CORE.key[event.key.keysym.scancode] = 1;
 
                 if(event.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
-                    CORE.exit = 1;
+                CORE.exit = 1;
             } break;
             
             case SDL_KEYUP: {
@@ -403,12 +429,11 @@ int ft_quit(void) {
 // -----------------------------------
 
 char* ft_screen_capture(int w, int h) {
+    // Get the default displays "display" and "root"
     Display* x_display = XOpenDisplay(NULL);
     Window x_root = DefaultRootWindow(x_display);
-
-    XWindowAttributes x_window_attrib = { 0 };
-    XGetWindowAttributes(x_display, x_root, &x_window_attrib);
-
+    
+    // Create an XImage of the screen, with the offset 0-0 and the size 1920-1080
     XImage* x_image = XGetImage(
         x_display, x_root,
         0, 0,
@@ -417,6 +442,15 @@ char* ft_screen_capture(int w, int h) {
         ZPixmap
     );
 
+    if(!x_image) {
+        fprintf(stdout, "[ ERR ] X11: Could not create an X11 Image\n");
+
+        XCloseDisplay(x_display);
+
+        return NULL;
+    }
+
+    // Allocate enough memory to fit in 1920-1080 image. Every color consists of 4 channels, so we need to multiply the output by 4
     char* data = (unsigned char*) calloc(w * h * 4, sizeof(char));
     if(!data) {
         fprintf(stderr, "[ ERR ] X11: %s\n", strerror(errno));
@@ -427,13 +461,16 @@ char* ft_screen_capture(int w, int h) {
         return NULL;
     }
 
+    // Copy all the bytes from the image to the "data" array
+    // X11 internally uses BGRA byte order, so we need to shift the values to the RGBA order
     for(int i = 0; i < w * h * 4; i += 4) {
         data[i + 0] = x_image->data[i + 2];
         data[i + 1] = x_image->data[i + 1];
         data[i + 2] = x_image->data[i + 0];
         data[i + 3] = x_image->data[i + 3];
     }
-
+    
+    // Clean-up
     XDestroyImage(x_image);
     XCloseDisplay(x_display);
 
@@ -480,11 +517,14 @@ t_tex2d ft_tex2d(int w, int h, char* data) {
 }
 
 int ft_draw_tex2d(t_tex2d tex, vec2 position, vec2 size) {
+    // Due to the nature of the application I'm not implementing render batching
+    // This program is simple, it only needs to have a one thing drawn to the screen
+    // Due to this reason there's no need for render batching
     GLfloat vertices[] = {
-        position[0], position[1], 0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     0.0f, 0.0f,     tex.id,
-        position[0] + size[0], position[1], 0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     1.0f, 0.0f,   tex.id,
-        position[0], position[1] + size[1], 0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     0.0f, 1.0f,   tex.id,
-        position[0] + size[0], position[1] + size[1], 0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     1.0f, 1.0f,     tex.id,
+        position[0], position[1],                       0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     0.0f, 0.0f,   tex.id, // Vert: 0
+        position[0] + size[0], position[1],             0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     1.0f, 0.0f,   tex.id, // Vert: 1
+        position[0], position[1] + size[1],             0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     0.0f, 1.0f,   tex.id, // Vert: 2
+        position[0] + size[0], position[1] + size[1],   0.0f,     1.0f, 1.0f, 1.0f, 1.0f,     1.0f, 1.0f,   tex.id, // Vert: 3
     };
 
     GLuint indices[] = {
@@ -588,6 +628,11 @@ int ft_cam2d_display(t_cam2d cam) {
 }
 
 int ft_screen_to_world(t_cam2d cam, vec2 src, vec2 dest) {
+    // How to process the screen position to world 2D position:
+    // 1. Get the view matrix of the current camera;
+    // 2. Invert the view matrix;
+    // 3. Multiply the inverted view matrix with the 4D vector: { Screen position X, Screen position Y, 0.0f, 1.0f };
+    // 4. Return the 1st two elements of said vector;
     mat4 mat_cam;
     mat4 mat_cam_inv;
     ft_cam2d_matrix(cam, mat_cam);
