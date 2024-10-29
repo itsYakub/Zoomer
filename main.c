@@ -18,8 +18,17 @@
 // SECTION: Includes
 // -----------------
 
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
+#ifdef __linux__
+
+    #include <X11/Xlib.h>
+    #include <X11/Xutil.h>
+
+#elif __WIN32__
+
+    #include <windows.h>
+
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -355,7 +364,6 @@ int ft_init_opengl(void) {
 int ft_poll_events(void) {
     CORE.mouse_pos_prev[0] = CORE.mouse_pos[0];
     CORE.mouse_pos_prev[1] = CORE.mouse_pos[1];
-    CORE.mouse_pos_prev[2] = CORE.mouse_pos[2];
 
     for(int i = 0; i < SDL_NUM_SCANCODES; i++)
         CORE.key_prev[i] = CORE.key[i];
@@ -429,6 +437,9 @@ int ft_quit(void) {
 // -----------------------------------
 
 char* ft_screen_capture(int w, int h) {
+
+#ifdef __linux__
+
     // Get the default displays "display" and "root"
     Display* x_display = XOpenDisplay(NULL);
     Window x_root = DefaultRootWindow(x_display);
@@ -451,7 +462,7 @@ char* ft_screen_capture(int w, int h) {
     }
 
     // Allocate enough memory to fit in 1920-1080 image. Every color consists of 4 channels, so we need to multiply the output by 4
-    char* data = (unsigned char*) calloc(w * h * 4, sizeof(char));
+    char* data = (char*) calloc(w * h * 4, sizeof(char));
     if(!data) {
         fprintf(stderr, "[ ERR ] X11: %s\n", strerror(errno));
 
@@ -475,6 +486,21 @@ char* ft_screen_capture(int w, int h) {
     XCloseDisplay(x_display);
 
     return data;
+
+#elif __WIN32__
+
+    fprintf(stdout, "[ WARN ] Windows support work in progress...\n");
+    
+    return NULL;
+
+#elif
+    
+    fprintf(stderr, "[ ERR ] Undefined platform\n");
+
+    return NULL;
+
+#endif
+
 }
 
 // ------------------------------
